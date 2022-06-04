@@ -65,7 +65,7 @@ public class SnapshotManager {
     final RaftStorageDirectory dir = storage.getStorageDir();
 
     // create a unique temporary directory
-    final File tmpDir =  new File(dir.getTmpDir(), UUID.randomUUID().toString());
+    final File tmpDir = new File(dir.getTmpDir(), snapshotChunkRequest.getRequestId());
     FileUtils.createDirectories(tmpDir);
     tmpDir.deleteOnExit();
 
@@ -82,10 +82,13 @@ public class SnapshotManager {
             + " with endIndex >= lastIncludedIndex " + lastIncludedIndex);
       }
 
-      String fileName = chunk.getFilename(); // this is relative to the root dir
+      String fileNameToRoot = chunk.getFilename(); // this is relative to the root dir
+      String fileName = fileNameToRoot.substring((dir.STATE_MACHINE_DIR_NAME + File.separator).length());
+      LOG.info("snapshot file name is {}", fileName);
       // TODO: assumes flat layout inside SM dir
-      File tmpSnapshotFile = new File(tmpDir,
-          new File(dir.getRoot(), fileName).getName());
+      final File tmpSnapshotFile = new File(tmpDir, fileName);
+      FileUtils.createDirectories(tmpSnapshotFile);
+      LOG.info("tmp SnapshotFile path {}", tmpSnapshotFile.getAbsolutePath());
 
       FileOutputStream out = null;
       try {
