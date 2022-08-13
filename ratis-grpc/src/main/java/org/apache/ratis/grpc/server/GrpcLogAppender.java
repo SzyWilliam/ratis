@@ -134,33 +134,36 @@ public class GrpcLogAppender extends LogAppenderBase {
     return getRaftLog().getLastCommittedIndex() > getFollower().getCommitIndex();
   }
 
+  private void sendAppendEntries(boolean isHeartbeat) throws IOException{
+    boolean installSnapshotRequired = false;
+
+    //HB period is expired OR we have messages OR follower is behind with commit index
+    if (shouldSendAppendEntries() || isFollowerCommitBehindLastCommitIndex()) {
+
+      if (installSnapshotEnabled) {
+        SnapshotInfo snapshot = shouldInstallSnapshot();
+        if (snapshot != null) {
+          installSnapshot(snapshot);
+          installSnapshotRequired = true;
+        }
+      } else {
+        TermIndex installSnapshotNotificationTermIndex = shouldNotifyToInstallSnapshot();
+        if (installSnapshotNotificationTermIndex != null) {
+          installSnapshot(installSnapshotNotificationTermIndex);
+          installSnapshotRequired = true;
+        }
+      }
+
+      appendLog(isHeartbeat || installSnapshotRequired || haveTooManyPendingRequests());
+
+    }
+    getLeaderState().checkHealth(getFollower());
+  }
+
   @Override
   public void run() throws IOException {
-    boolean installSnapshotRequired;
     for(; isRunning(); mayWait()) {
-      installSnapshotRequired = false;
-
-      //HB period is expired OR we have messages OR follower is behind with commit index
-      if (shouldSendAppendEntries() || isFollowerCommitBehindLastCommitIndex()) {
-
-        if (installSnapshotEnabled) {
-          SnapshotInfo snapshot = shouldInstallSnapshot();
-          if (snapshot != null) {
-            installSnapshot(snapshot);
-            installSnapshotRequired = true;
-          }
-        } else {
-          TermIndex installSnapshotNotificationTermIndex = shouldNotifyToInstallSnapshot();
-          if (installSnapshotNotificationTermIndex != null) {
-            installSnapshot(installSnapshotNotificationTermIndex);
-            installSnapshotRequired = true;
-          }
-        }
-
-        appendLog(installSnapshotRequired || haveTooManyPendingRequests());
-
-      }
-      getLeaderState().checkHealth(getFollower());
+      sendAppendEntries(false);
     }
 
     Optional.ofNullable(appendLogRequestObserver).ifPresent(StreamObservers::onCompleted);
@@ -202,6 +205,11 @@ public class GrpcLogAppender extends LogAppenderBase {
   @Override
   public boolean shouldSendAppendEntries() {
     return appendLogRequestObserver == null || super.shouldSendAppendEntries();
+  }
+
+  @Override
+  public void sendAppendEntriesNow() throws IOException {
+    sendAppendEntries(true);
   }
 
   @Override

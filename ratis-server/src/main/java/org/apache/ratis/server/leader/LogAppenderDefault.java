@@ -123,42 +123,56 @@ class LogAppenderDefault extends LogAppenderBase {
     return reply;
   }
 
+  private void sendAppendEntries() throws InterruptedException, IOException {
+    SnapshotInfo snapshot = shouldInstallSnapshot();
+    if (snapshot != null) {
+      LOG.info("{}: followerNextIndex = {} but logStartIndex = {}, send snapshot {} to follower",
+          this, getFollower().getNextIndex(), getRaftLog().getStartIndex(), snapshot);
+
+      final InstallSnapshotReplyProto r = installSnapshot(snapshot);
+      if (r != null) {
+        switch (r.getResult()) {
+          case NOT_LEADER:
+            onFollowerTerm(r.getTerm());
+            break;
+          case SUCCESS:
+          case SNAPSHOT_UNAVAILABLE:
+          case ALREADY_INSTALLED:
+            getFollower().setAttemptedToInstallSnapshot();
+            break;
+          default:
+            break;
+        }
+      }
+      // otherwise if r is null, retry the snapshot installation
+    } else {
+      final AppendEntriesReplyProto r = sendAppendEntriesWithRetries();
+      if (r != null) {
+        handleReply(r);
+      }
+    }
+  }
+
   @Override
   public void run() throws InterruptedException, IOException {
     while (isRunning()) {
       if (shouldSendAppendEntries()) {
-        SnapshotInfo snapshot = shouldInstallSnapshot();
-        if (snapshot != null) {
-          LOG.info("{}: followerNextIndex = {} but logStartIndex = {}, send snapshot {} to follower",
-              this, getFollower().getNextIndex(), getRaftLog().getStartIndex(), snapshot);
-
-          final InstallSnapshotReplyProto r = installSnapshot(snapshot);
-          if (r != null) {
-            switch (r.getResult()) {
-              case NOT_LEADER:
-                onFollowerTerm(r.getTerm());
-                break;
-              case SUCCESS:
-              case SNAPSHOT_UNAVAILABLE:
-              case ALREADY_INSTALLED:
-                getFollower().setAttemptedToInstallSnapshot();
-                break;
-              default:
-                break;
-            }
-          }
-          // otherwise if r is null, retry the snapshot installation
-        } else {
-          final AppendEntriesReplyProto r = sendAppendEntriesWithRetries();
-          if (r != null) {
-            handleReply(r);
-          }
-        }
+        sendAppendEntries();
       }
       if (isRunning() && !hasAppendEntries()) {
         getEventAwaitForSignal().await(getHeartbeatWaitTimeMs(), TimeUnit.MILLISECONDS);
       }
       getLeaderState().checkHealth(getFollower());
+    }
+  }
+
+  @Override
+  public void sendAppendEntriesNow() throws IOException {
+    try {
+      sendAppendEntries();
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      LOG.info(this + " was interrupted: " + e);
     }
   }
 
