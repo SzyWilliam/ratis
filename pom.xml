@@ -176,6 +176,7 @@
     <maven-stylus-skin.version>1.5</maven-stylus-skin.version>
     <maven-surefire-plugin.version>3.0.0-M1</maven-surefire-plugin.version>
     <maven-checkstyle-plugin.version>3.1.2</maven-checkstyle-plugin.version>
+    <maven-assembly-plugin.version>3.4.1</maven-assembly-plugin.version>
 
     <checkstyle.version>9.3</checkstyle.version>
 
@@ -393,6 +394,11 @@
       </dependency>
       <dependency>
         <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-simple</artifactId>
+        <version>1.7.29</version>
+      </dependency>
+      <dependency>
+        <groupId>org.slf4j</groupId>
         <artifactId>slf4j-log4j12</artifactId>
         <scope>test</scope>
         <version>1.7.29</version>
@@ -522,6 +528,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-assembly-plugin</artifactId>
+          <version>${maven-assembly-plugin.version}</version>
           <configuration>
             <!--Defer to the ratis-assembly sub-module.  It does all assembly-->
             <skipAssembly>true</skipAssembly>
